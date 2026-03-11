@@ -1,0 +1,19 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+
+jobs:
+  validate-compose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate infra compose
+        run: docker compose -f docker-compose.yml --env-file .env.example config
+
+      - name: Validate full compose stack
+        run: docker compose -f docker-compose.yml -f docker-compose.apps.yml --env-file .env.example config

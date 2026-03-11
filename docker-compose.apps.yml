@@ -1,0 +1,71 @@
+services:
+  backend-api:
+    build:
+      context: ../backend-api
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      GRAPHQL_PATH: /graphql
+      DATABASE_URL: postgresql://app:app@postgres:5432/procurement
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://app:app@rabbitmq:5672
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+    networks:
+      - platform-net
+
+  scraper-service:
+    build:
+      context: ../scraper-service
+    environment:
+      NODE_ENV: production
+      RABBITMQ_URL: amqp://app:app@rabbitmq:5672
+      QUEUE_RAW_EVENT: source.raw.v1
+      SCRAPE_SCHEDULE: "*/20 * * * *"
+      USE_PLAYWRIGHT: "false"
+      SHARED_CONTRACTS_DIR: /opt/shared-contracts
+    volumes:
+      - ../shared-contracts:/opt/shared-contracts:ro
+    depends_on:
+      - rabbitmq
+    networks:
+      - platform-net
+
+  processing-worker:
+    build:
+      context: ../processing-worker
+    environment:
+      NODE_ENV: production
+      RABBITMQ_URL: amqp://app:app@rabbitmq:5672
+      API_GRAPHQL_URL: http://backend-api:3000/graphql
+      QUEUE_RAW_EVENT: source.raw.v1
+      QUEUE_NORMALIZED_EVENT: source.normalized.v1
+      SHARED_CONTRACTS_DIR: /opt/shared-contracts
+    volumes:
+      - ../shared-contracts:/opt/shared-contracts:ro
+    depends_on:
+      - rabbitmq
+      - backend-api
+    networks:
+      - platform-net
+
+  frontend-app:
+    build:
+      context: ../frontend-app
+      args:
+        NUXT_PUBLIC_GRAPHQL_ENDPOINT: http://backend-api:3000/graphql
+        NUXT_PUBLIC_APP_NAME: AIMSORA Procurement Monitoring
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend-api
+    networks:
+      - platform-net
+
+networks:
+  platform-net:
+    external: true
