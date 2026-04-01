@@ -1,74 +1,119 @@
 services:
   backend-api:
     image: ${BACKEND_API_IMAGE}:${BACKEND_API_IMAGE_TAG}
+    restart: unless-stopped
     environment:
       NODE_ENV: production
       PORT: 3000
       GRAPHQL_PATH: /graphql
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      REDIS_URL: redis://redis:6379
-      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      RABBITMQ_URL: ${RABBITMQ_URL}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      REFRESH_TOKEN_TTL_DAYS: ${REFRESH_TOKEN_TTL_DAYS:-30}
+      INGEST_API_TOKEN: ${INGEST_API_TOKEN}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      ADMIN_FULL_NAME: ${ADMIN_FULL_NAME:-Deploy Administrator}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      THROTTLE_TTL_MS: ${THROTTLE_TTL_MS:-60000}
+      THROTTLE_LIMIT: ${THROTTLE_LIMIT:-120}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: ${MINIO_BUCKET}
+      S3_ENDPOINT: ${S3_ENDPOINT}
+      S3_REGION: ${S3_REGION}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
     ports:
-      - "3000:3000"
+      - "${BACKEND_PORT:-3000}:3000"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:3000/api/health/ready | grep -q '\"status\":\"ready\"'"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
     depends_on:
-      - postgres
-      - redis
-      - rabbitmq
-    restart: unless-stopped
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
     networks:
       - platform-net
 
   scraper-service:
     image: ${SCRAPER_SERVICE_IMAGE}:${SCRAPER_SERVICE_IMAGE_TAG}
+    restart: unless-stopped
     environment:
       NODE_ENV: production
-      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672
-      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: ${RABBITMQ_URL}
       QUEUE_RAW_EVENT: source.raw.v1
-      SCRAPE_SCHEDULE: "*/20 * * * *"
-      USE_PLAYWRIGHT: "false"
+      QUEUE_QUARANTINE_EVENT: source.raw.quarantine.v1
+      SCRAPE_SCHEDULE: "${SCRAPE_SCHEDULE:-*/20 * * * *}"
+      FIND_TENDER_API_URL: ${FIND_TENDER_API_URL:-https://www.find-tender.service.gov.uk/api/1.0/ocdsReleasePackages?limit=5}
       SHARED_CONTRACTS_DIR: /opt/shared-contracts
-      S3_ENDPOINT: http://minio:9000
-      S3_REGION: ru-central-1
-      S3_ACCESS_KEY: ${MINIO_ROOT_USER}
-      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
-      S3_BUCKET: ${MINIO_BUCKET}
+      S3_ENDPOINT: ${S3_ENDPOINT}
+      S3_REGION: ${S3_REGION}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
+      ENABLED_SOURCES: ${ENABLED_SOURCES}
     volumes:
       - ./contracts:/opt/shared-contracts:ro
     depends_on:
-      - rabbitmq
-      - minio
-    restart: unless-stopped
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
     networks:
       - platform-net
 
   processing-worker:
     image: ${PROCESSING_WORKER_IMAGE}:${PROCESSING_WORKER_IMAGE_TAG}
+    restart: unless-stopped
     environment:
       NODE_ENV: production
-      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672
-      REDIS_URL: redis://redis:6379
-      API_GRAPHQL_URL: http://backend-api:3000/graphql
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      API_GRAPHQL_URL: ${API_GRAPHQL_URL:-http://backend-api:3000/graphql}
+      API_INGEST_TOKEN: ${API_INGEST_TOKEN}
       QUEUE_RAW_EVENT: source.raw.v1
+      QUEUE_RETRY_EVENT: source.raw.retry.v1
+      QUEUE_DEAD_LETTER_EVENT: source.raw.dlq.v1
       QUEUE_NORMALIZED_EVENT: source.normalized.v1
       SHARED_CONTRACTS_DIR: /opt/shared-contracts
     volumes:
       - ./contracts:/opt/shared-contracts:ro
     depends_on:
-      - rabbitmq
-      - backend-api
-    restart: unless-stopped
+      rabbitmq:
+        condition: service_healthy
+      backend-api:
+        condition: service_healthy
     networks:
       - platform-net
 
-  aimsora:
-    image: ${AIMSORA_IMAGE}:${AIMSORA_IMAGE_TAG}
-    ports:
-      - "8080:80"
-    depends_on:
-      - backend-api
+  frontend:
+    image: ${FRONTEND_IMAGE}:${FRONTEND_IMAGE_TAG}
     restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      backend-api:
+        condition: service_healthy
     networks:
       - platform-net
 

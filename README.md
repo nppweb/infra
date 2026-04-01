@@ -1,77 +1,180 @@
 # deployment-infra
 
-![CI](https://img.shields.io/badge/CI-GitHub_Actions-2088FF?logo=githubactions&logoColor=white)
-![CD](https://img.shields.io/badge/CD-GitHub_Deploy-2ea44f?logo=github&logoColor=white)
-![IaC](https://img.shields.io/badge/IaC-Docker_Compose-1d63ed?logo=docker&logoColor=white)
+Инфраструктурный репозиторий для надежного локального запуска платформы через Docker Compose.
 
-Инфраструктурный репозиторий для локального запуска и деплоя через GitHub.
+## Что поднимается локально
 
-## Что делает этот репозиторий
+- `postgres`
+- `redis`
+- `rabbitmq`
+- `minio`
+- `minio-init` для автосоздания bucket
+- `backend-api`
+- `processing-worker`
+- `scraper-service`
+- `frontend` c nginx внутри контейнера
 
-- поднимает инфраструктуру платформы (PostgreSQL, Redis, RabbitMQ, MinIO);
-- содержит compose-описание локального запуска и deploy-контура через GHCR-образы;
-- фиксирует единые network/DNS-имена для межсервисного взаимодействия.
+Все сервисы работают в одной сети `platform-net` и обращаются друг к другу по service name.
 
-## Черновая реализация
+## Обязательные env-переменные
 
-- `docker-compose.yml` - инфраструктурные сервисы;
-- `docker-compose.apps.yml` - локальный запуск `backend-api`, `scraper-service`, `processing-worker`, `aimsora` из исходников;
-- `docker-compose.deploy.yml` - запуск приложений из GHCR-образов для удаленного стенда;
-- `contracts/events/*` - снапшот контрактов для `scraper-service` и `processing-worker`;
-- `Makefile` с командами `up`, `down`, `up-all`, `down-all`;
-- CI workflow с валидацией compose-конфигураций;
-- CD workflow `.github/workflows/deploy.yml` для выкладки стенда по SSH.
+Минимально для локалки должны быть заданы:
+
+- `POSTGRES_DB`
+- `POSTGRES_USER`
+- `POSTGRES_PASSWORD`
+- `DATABASE_URL`
+- `REDIS_URL`
+- `RABBITMQ_URL`
+- `MINIO_ROOT_USER`
+- `MINIO_ROOT_PASSWORD`
+- `S3_ENDPOINT`
+- `S3_ACCESS_KEY`
+- `S3_SECRET_KEY`
+- `S3_BUCKET`
+- `INGEST_API_TOKEN`
+- `API_INGEST_TOKEN`
+- `ADMIN_EMAIL`
+- `ADMIN_PASSWORD`
+- `ENABLED_SOURCES`
+
+Рабочий шаблон уже лежит в [.env.example](/home/minkin/vkrdiff/deployment-infra/.env.example). Для локального bootstrap `INGEST_API_TOKEN` и `API_INGEST_TOKEN` должны совпадать.
 
 ## Локальный запуск
 
-Только инфраструктура:
+1. Создай локальный env:
 
 ```bash
 cp .env.example .env
+```
+
+2. Подними весь стек одной командой:
+
+```bash
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.apps.yml up -d --build
+```
+
+Альтернатива через `make`:
+
+```bash
 make up
 ```
 
-Инфраструктура + приложения:
+## Куда открыть браузер
+
+- Frontend: `http://localhost:8080`
+- GraphQL через nginx frontend: `http://localhost:8080/graphql`
+- Backend health: `http://localhost:3000/api/health`
+- RabbitMQ management: `http://localhost:15672`
+- MinIO console: `http://localhost:9001`
+
+## Логин для локалки
+
+По умолчанию:
+
+- email: `admin@admin.ru`
+- password: `admin`
+
+`backend-api` на старте прогоняет Prisma migrations и seed, поэтому demo admin и стартовые данные создаются автоматически.
+
+## Проверка, что все работает
+
+Проверь состояние контейнеров:
 
 ```bash
-cp .env.example .env
-make up-all
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.apps.yml ps
 ```
 
-Остановка полного стека:
+Ожидаемо:
+
+- `postgres`, `rabbitmq`, `minio`, `backend-api`, `frontend` имеют статус `healthy`
+- `minio-init` завершился со статусом `Exited (0)`
+- `processing-worker` и `scraper-service` находятся в `Up`
+
+Проверь backend health:
 
 ```bash
-make down-all
+curl http://localhost:3000/api/health
+curl http://localhost:3000/api/health/ready
 ```
 
-## Деплой стенда через GitHub Actions
+Проверь GraphQL через frontend nginx:
 
-`deployment-infra` использует workflow `Deploy Stand` и compose-файл `docker-compose.deploy.yml`.
+```bash
+curl http://localhost:8080/graphql \
+  -H 'content-type: application/json' \
+  --data '{"query":"query { health }"}'
+```
 
-### Что нужно настроить в GitHub (repository secrets)
+Проверь, что frontend открывается:
 
-- `SSH_HOST`, `SSH_USER`, `SSH_PRIVATE_KEY` - доступ к серверу;
-- `GHCR_USERNAME`, `GHCR_TOKEN` - доступ к `ghcr.io` (token с `read:packages`);
-- `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`;
-- `RABBITMQ_DEFAULT_USER`, `RABBITMQ_DEFAULT_PASS`;
-- `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `MINIO_BUCKET`;
-- `JWT_ACCESS_SECRET`.
+```bash
+curl -I http://localhost:8080
+```
 
-### Запуск деплоя
+Проверь связность backend, worker и scraper:
 
-1. Открой `Actions -> Deploy Stand`.
-2. Выбери `environment` (`staging` или `production`).
-3. Укажи `image_tag` (обычно `edge`).
-4. Нажми `Run workflow`.
+```bash
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.apps.yml logs backend-api processing-worker scraper-service
+```
 
-Если меняются схемы в `shared-contracts`, обнови `contracts/events/*` в этом репозитории перед деплоем.
+Ожидаемо:
 
-## Сеть и адреса
+- `backend-api` поднялся после миграций и отвечает на `/api/health/ready`
+- `processing-worker` пишет `processing-worker started`
+- `scraper-service` пишет `scraper-service starting`
+- в MinIO существует bucket `artifacts` или значение из `S3_BUCKET`
 
-- сеть: `platform-net`
-- `postgres:5432`
-- `redis:6379`
-- `rabbitmq:5672` (`15672` management)
-- `minio:9000` (`9001` console)
-- `backend-api:3000`
-- `aimsora:80` (внешний порт `8080`)
+## Полезные команды
+
+Поднять стек:
+
+```bash
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.apps.yml up -d --build
+```
+
+Остановить и удалить volumes:
+
+```bash
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.apps.yml down -v --remove-orphans
+```
+
+Смотреть логи:
+
+```bash
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.apps.yml logs -f
+```
+
+Смотреть логи одного сервиса:
+
+```bash
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.apps.yml logs -f backend-api
+```
+
+Перезапустить конкретный сервис:
+
+```bash
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.apps.yml restart processing-worker
+```
+
+## Сбросить данные и поднять заново
+
+1. Останови стек и удали volumes:
+
+```bash
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.apps.yml down -v --remove-orphans
+```
+
+2. Подними заново:
+
+```bash
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.apps.yml up -d --build
+```
+
+## Что отвечает за устойчивый старт
+
+- `postgres`, `rabbitmq`, `minio`, `backend-api` имеют реальные healthcheck'и
+- `minio-init` создает bucket до старта `scraper-service`
+- `backend-api` ждёт Postgres и запускает migrations/seed перед стартом приложения
+- `processing-worker` ждёт `rabbitmq` и `backend-api`
+- `scraper-service` ждёт `rabbitmq`, `minio` и `minio-init`

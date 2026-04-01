@@ -5,18 +5,42 @@
   "type": "object",
   "required": [
     "eventId",
+    "runKey",
     "source",
     "collectedAt",
     "url",
     "payloadVersion",
+    "artifacts",
     "raw"
   ],
   "properties": {
     "eventId": { "type": "string", "minLength": 1 },
+    "runKey": { "type": "string", "minLength": 1 },
     "source": { "type": "string", "minLength": 1 },
     "collectedAt": { "type": "string", "format": "date-time" },
     "url": { "type": "string", "format": "uri" },
     "payloadVersion": { "type": "string", "const": "v1" },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kind", "bucket", "objectKey"],
+        "properties": {
+          "kind": { "type": "string", "minLength": 1 },
+          "bucket": { "type": "string", "minLength": 1 },
+          "objectKey": { "type": "string", "minLength": 1 },
+          "mimeType": { "type": "string" },
+          "checksum": { "type": "string" },
+          "sizeBytes": { "type": "integer", "minimum": 0 },
+          "metadata": { "type": "object", "additionalProperties": true }
+        },
+        "additionalProperties": false
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true
+    },
     "raw": { "type": "object", "additionalProperties": true }
   },
   "additionalProperties": false

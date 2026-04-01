@@ -61,22 +61,45 @@ jobs:
           MINIO_ROOT_USER: ${{ secrets.MINIO_ROOT_USER }}
           MINIO_ROOT_PASSWORD: ${{ secrets.MINIO_ROOT_PASSWORD }}
           MINIO_BUCKET: ${{ secrets.MINIO_BUCKET }}
+          INGEST_API_TOKEN: ${{ secrets.INGEST_API_TOKEN }}
+          API_INGEST_TOKEN: ${{ secrets.API_INGEST_TOKEN }}
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          ADMIN_FULL_NAME: ${{ secrets.ADMIN_FULL_NAME }}
+          ENABLED_SOURCES: ${{ vars.ENABLED_SOURCES }}
           BACKEND_API_IMAGE: ${{ vars.BACKEND_API_IMAGE }}
           SCRAPER_SERVICE_IMAGE: ${{ vars.SCRAPER_SERVICE_IMAGE }}
           PROCESSING_WORKER_IMAGE: ${{ vars.PROCESSING_WORKER_IMAGE }}
-          FRONTEND_APP_IMAGE: ${{ vars.FRONTEND_APP_IMAGE }}
+          FRONTEND_IMAGE: ${{ vars.FRONTEND_IMAGE }}
         run: |
           set -euo pipefail
           cat > .env.deploy <<EOF
           POSTGRES_DB=${POSTGRES_DB:-procurement}
           POSTGRES_USER=${POSTGRES_USER:-app}
           POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-app}
+          DATABASE_URL=postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app}@postgres:5432/${POSTGRES_DB:-procurement}?schema=public
+          REDIS_URL=redis://redis:6379
           JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET:-replace_me}
+          INGEST_API_TOKEN=${INGEST_API_TOKEN:-replace_me_with_shared_ingest_token}
+          API_INGEST_TOKEN=${API_INGEST_TOKEN:-${INGEST_API_TOKEN:-replace_me_with_shared_ingest_token}}
+          ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
+          ADMIN_PASSWORD=${ADMIN_PASSWORD:-ChangeMe123456}
+          ADMIN_FULL_NAME=${ADMIN_FULL_NAME:-Deploy Administrator}
           RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER:-app}
           RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS:-app}
+          RABBITMQ_URL=amqp://${RABBITMQ_DEFAULT_USER:-app}:${RABBITMQ_DEFAULT_PASS:-app}@rabbitmq:5672
           MINIO_ROOT_USER=${MINIO_ROOT_USER:-minio}
           MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minio123}
           MINIO_BUCKET=${MINIO_BUCKET:-scraper-artifacts}
+          S3_ENDPOINT=http://minio:9000
+          S3_REGION=ru-central-1
+          S3_ACCESS_KEY=${MINIO_ROOT_USER:-minio}
+          S3_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minio123}
+          S3_BUCKET=${MINIO_BUCKET:-scraper-artifacts}
+          S3_FORCE_PATH_STYLE=true
+          ENABLED_SOURCES=${ENABLED_SOURCES:-demo-source}
+          API_GRAPHQL_URL=http://backend-api:3000/graphql
+          FRONTEND_PORT=8080
 
           BACKEND_API_IMAGE=${BACKEND_API_IMAGE:-ghcr.io/aimsora/backend-api}
           BACKEND_API_IMAGE_TAG=${IMAGE_TAG}
@@ -84,8 +107,8 @@ jobs:
           SCRAPER_SERVICE_IMAGE_TAG=${IMAGE_TAG}
           PROCESSING_WORKER_IMAGE=${PROCESSING_WORKER_IMAGE:-ghcr.io/aimsora/processing-worker}
           PROCESSING_WORKER_IMAGE_TAG=${IMAGE_TAG}
-          FRONTEND_APP_IMAGE=${FRONTEND_APP_IMAGE:-ghcr.io/aimsora/frontend-app}
-          FRONTEND_APP_IMAGE_TAG=${IMAGE_TAG}
+          FRONTEND_IMAGE=${FRONTEND_IMAGE:-ghcr.io/aimsora/aimsora}
+          FRONTEND_IMAGE_TAG=${IMAGE_TAG}
           EOF
 
       - name: Sync compose files to server

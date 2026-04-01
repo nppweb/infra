@@ -1,30 +1,40 @@
-.PHONY: up down logs ps up-all down-all logs-all ps-all
+.PHONY: up down logs ps restart up-infra down-infra logs-infra ps-infra
+
+COMPOSE_LOCAL=docker compose --env-file .env -f docker-compose.yml -f docker-compose.apps.yml
+COMPOSE_INFRA=docker compose --env-file .env -f docker-compose.yml
 
 up:
 	cp -n .env.example .env || true
-	docker compose --env-file .env up -d
+	$(COMPOSE_LOCAL) up -d --build
 
 down:
-	docker compose --env-file .env down
+	cp -n .env.example .env || true
+	$(COMPOSE_LOCAL) down -v --remove-orphans
 
 logs:
-	docker compose --env-file .env logs -f
+	cp -n .env.example .env || true
+	$(COMPOSE_LOCAL) logs -f
 
 ps:
-	docker compose --env-file .env ps
-
-up-all:
 	cp -n .env.example .env || true
-	docker compose --env-file .env -f docker-compose.yml -f docker-compose.apps.yml up -d --build
+	$(COMPOSE_LOCAL) ps
 
-down-all:
+restart:
 	cp -n .env.example .env || true
-	docker compose --env-file .env -f docker-compose.yml -f docker-compose.apps.yml down
+	$(COMPOSE_LOCAL) restart $(SERVICE)
 
-logs-all:
+up-infra:
 	cp -n .env.example .env || true
-	docker compose --env-file .env -f docker-compose.yml -f docker-compose.apps.yml logs -f
+	$(COMPOSE_INFRA) up -d
 
-ps-all:
+down-infra:
 	cp -n .env.example .env || true
-	docker compose --env-file .env -f docker-compose.yml -f docker-compose.apps.yml ps
+	$(COMPOSE_INFRA) down -v --remove-orphans
+
+logs-infra:
+	cp -n .env.example .env || true
+	$(COMPOSE_INFRA) logs -f
+
+ps-infra:
+	cp -n .env.example .env || true
+	$(COMPOSE_INFRA) ps
