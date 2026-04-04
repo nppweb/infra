@@ -6,6 +6,7 @@ services:
       NODE_ENV: production
       PORT: 3000
       GRAPHQL_PATH: /graphql
+      SCRAPER_CONTROL_URL: ${SCRAPER_CONTROL_URL:-http://scraper-service:3001}
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL}
       RABBITMQ_URL: ${RABBITMQ_URL}
@@ -16,6 +17,7 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       ADMIN_FULL_NAME: ${ADMIN_FULL_NAME:-Deploy Administrator}
+      ENABLED_SOURCES: ${ENABLED_SOURCES}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       THROTTLE_TTL_MS: ${THROTTLE_TTL_MS:-60000}
       THROTTLE_LIMIT: ${THROTTLE_LIMIT:-120}
@@ -58,11 +60,14 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
+      CONTROL_HOST: ${SCRAPER_CONTROL_HOST:-0.0.0.0}
+      CONTROL_PORT: ${SCRAPER_CONTROL_PORT:-3001}
+      BACKEND_INTERNAL_URL: ${BACKEND_INTERNAL_URL:-http://backend-api:3000/api/internal/scraper/config}
+      API_INGEST_TOKEN: ${API_INGEST_TOKEN}
       RABBITMQ_URL: ${RABBITMQ_URL}
       QUEUE_RAW_EVENT: source.raw.v1
       QUEUE_QUARANTINE_EVENT: source.raw.quarantine.v1
       SCRAPE_SCHEDULE: "${SCRAPE_SCHEDULE:-*/20 * * * *}"
-      FIND_TENDER_API_URL: ${FIND_TENDER_API_URL:-https://www.find-tender.service.gov.uk/api/1.0/ocdsReleasePackages?limit=5}
       SHARED_CONTRACTS_DIR: /opt/shared-contracts
       S3_ENDPOINT: ${S3_ENDPOINT}
       S3_REGION: ${S3_REGION}
@@ -74,6 +79,8 @@ services:
     volumes:
       - ./contracts:/opt/shared-contracts:ro
     depends_on:
+      backend-api:
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
       minio:

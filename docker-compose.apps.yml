@@ -7,6 +7,7 @@ services:
       NODE_ENV: production
       PORT: 3000
       GRAPHQL_PATH: /graphql
+      SCRAPER_CONTROL_URL: ${SCRAPER_CONTROL_URL:-http://scraper-service:3001}
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL}
       RABBITMQ_URL: ${RABBITMQ_URL}
@@ -17,6 +18,7 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       ADMIN_FULL_NAME: ${ADMIN_FULL_NAME:-Local Administrator}
+      ENABLED_SOURCES: ${ENABLED_SOURCES}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       THROTTLE_TTL_MS: ${THROTTLE_TTL_MS:-60000}
       THROTTLE_LIMIT: ${THROTTLE_LIMIT:-120}
@@ -61,11 +63,14 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
+      CONTROL_HOST: ${SCRAPER_CONTROL_HOST:-0.0.0.0}
+      CONTROL_PORT: ${SCRAPER_CONTROL_PORT:-3001}
+      BACKEND_INTERNAL_URL: ${BACKEND_INTERNAL_URL:-http://backend-api:3000/api/internal/scraper/config}
+      API_INGEST_TOKEN: ${API_INGEST_TOKEN}
       RABBITMQ_URL: ${RABBITMQ_URL}
       QUEUE_RAW_EVENT: source.raw.v1
       QUEUE_QUARANTINE_EVENT: source.raw.quarantine.v1
       SCRAPE_SCHEDULE: "${SCRAPE_SCHEDULE:-*/20 * * * *}"
-      FIND_TENDER_API_URL: ${FIND_TENDER_API_URL:-https://www.find-tender.service.gov.uk/api/1.0/ocdsReleasePackages?limit=5}
       SHARED_CONTRACTS_DIR: /opt/shared-contracts
       S3_ENDPOINT: ${S3_ENDPOINT}
       S3_REGION: ${S3_REGION}
@@ -77,31 +82,33 @@ services:
       EASUZ_BASE_URL: ${EASUZ_BASE_URL:-https://easuz.mosreg.ru}
       EASUZ_SEARCH_URL: ${EASUZ_SEARCH_URL:-https://easuz.mosreg.ru/tenders}
       EASUZ_MAX_ITEMS: ${EASUZ_MAX_ITEMS:-5}
-      EASUZ_USER_AGENT: ${EASUZ_USER_AGENT:-AIMSORA procurement monitor/1.0 (+https://example.local/aimsora)}
+      EASUZ_USER_AGENT: ${EASUZ_USER_AGENT:-NPPWEB procurement monitor/1.0 (+https://example.local/nppweb)}
       EIS_BASE_URL: ${EIS_BASE_URL:-https://zakupki.gov.ru}
       EIS_SEARCH_URL: ${EIS_SEARCH_URL:-https://zakupki.gov.ru/epz/order/extendedsearch/results.html?searchString=&morphology=on&sortDirection=false&recordsPerPage=_10&showLotsInfoHidden=false}
       EIS_MAX_ITEMS: ${EIS_MAX_ITEMS:-5}
-      EIS_USER_AGENT: ${EIS_USER_AGENT:-AIMSORA procurement monitor/1.0 (+https://example.local/aimsora)}
+      EIS_USER_AGENT: ${EIS_USER_AGENT:-NPPWEB procurement monitor/1.0 (+https://example.local/nppweb)}
       RNP_BASE_URL: ${RNP_BASE_URL:-https://zakupki.gov.ru}
       RNP_SEARCH_URL: ${RNP_SEARCH_URL:-https://zakupki.gov.ru/epz/dishonestsupplier/search/results.html?searchString=&recordsPerPage=_10}
       RNP_MAX_ITEMS: ${RNP_MAX_ITEMS:-5}
-      RNP_USER_AGENT: ${RNP_USER_AGENT:-AIMSORA procurement monitor/1.0 (+https://example.local/aimsora)}
+      RNP_USER_AGENT: ${RNP_USER_AGENT:-NPPWEB procurement monitor/1.0 (+https://example.local/nppweb)}
       FEDRESURS_BASE_URL: ${FEDRESURS_BASE_URL:-https://bankrot.fedresurs.ru}
       FEDRESURS_SEARCH_URL: ${FEDRESURS_SEARCH_URL:-https://bankrot.fedresurs.ru/Messages.aspx}
       FEDRESURS_MAX_ITEMS: ${FEDRESURS_MAX_ITEMS:-5}
-      FEDRESURS_USER_AGENT: ${FEDRESURS_USER_AGENT:-AIMSORA procurement monitor/1.0 (+https://example.local/aimsora)}
+      FEDRESURS_USER_AGENT: ${FEDRESURS_USER_AGENT:-NPPWEB procurement monitor/1.0 (+https://example.local/nppweb)}
       FNS_BASE_URL: ${FNS_BASE_URL:-https://egrul.nalog.ru}
       FNS_LOOKUP_QUERIES: ${FNS_LOOKUP_QUERIES:-7707083893}
       FNS_MAX_ITEMS: ${FNS_MAX_ITEMS:-3}
-      FNS_USER_AGENT: ${FNS_USER_AGENT:-AIMSORA procurement monitor/1.0 (+https://example.local/aimsora)}
+      FNS_USER_AGENT: ${FNS_USER_AGENT:-NPPWEB procurement monitor/1.0 (+https://example.local/nppweb)}
       FNS_DOWNLOAD_EXTRACT: ${FNS_DOWNLOAD_EXTRACT:-true}
       GISTORGI_BASE_URL: ${GISTORGI_BASE_URL:-https://torgi.gov.ru}
       GISTORGI_SEARCH_URL: ${GISTORGI_SEARCH_URL:-https://torgi.gov.ru/new/public/lots/search}
       GISTORGI_MAX_ITEMS: ${GISTORGI_MAX_ITEMS:-5}
-      GISTORGI_USER_AGENT: ${GISTORGI_USER_AGENT:-AIMSORA procurement monitor/1.0 (+https://example.local/aimsora)}
+      GISTORGI_USER_AGENT: ${GISTORGI_USER_AGENT:-NPPWEB procurement monitor/1.0 (+https://example.local/nppweb)}
     volumes:
       - ../contracts:/opt/shared-contracts:ro
     depends_on:
+      backend-api:
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
       minio:
