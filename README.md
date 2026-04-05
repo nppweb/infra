@@ -12,6 +12,7 @@ Docker Compose инфраструктура для локального запу
 - `backend-api`
 - `processing-worker`
 - `scraper-service`
+- `xray-proxy` (если настроен локальный proxy-конфиг)
 - `frontend`
 
 Все сервисы работают в сети `platform-net` и обращаются друг к другу по service name.
@@ -28,6 +29,16 @@ docker compose --env-file .env -f docker-compose.yml -f docker-compose.apps.yml 
 ```bash
 make up
 ```
+
+Если для государственных площадок нужен proxy-маршрут, создайте локальный файл:
+
+```bash
+cp xray-local/config.example.json xray-local/config.json
+```
+
+и заполните его приватными параметрами. Этот файл не коммитится.
+
+Для deploy-контура логика такая же: на сервере должен существовать файл `xray-local/config.json`. Чтобы compose поднял `xray-proxy` автоматически, добавьте в deploy `.env` значение `COMPOSE_PROFILES=proxy` и задайте `HTTP_PROXY/HTTPS_PROXY=http://xray-proxy:8080`.
 
 ## Куда открыть браузер
 
@@ -99,3 +110,4 @@ docker compose --env-file .env -f docker-compose.yml -f docker-compose.apps.yml 
 - `backend-api` ждёт Postgres и запускает migrations/seed перед стартом;
 - `processing-worker` ждёт `rabbitmq` и `backend-api`;
 - `scraper-service` ждёт `rabbitmq`, `minio` и `minio-init`.
+- `scraper-service` может идти наружу через `xray-proxy`, если в `.env` заданы `HTTP_PROXY/HTTPS_PROXY`.

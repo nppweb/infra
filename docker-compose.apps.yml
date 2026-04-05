@@ -1,4 +1,13 @@
 services:
+  xray-proxy:
+    image: ghcr.io/xtls/xray-core:latest
+    restart: unless-stopped
+    command: ["run", "-c", "/etc/xray/config.json"]
+    volumes:
+      - ./xray-local/config.json:/etc/xray/config.json:ro
+    networks:
+      - platform-net
+
   backend-api:
     build:
       context: ../npp-backend
@@ -66,6 +75,7 @@ services:
       CONTROL_HOST: ${SCRAPER_CONTROL_HOST:-0.0.0.0}
       CONTROL_PORT: ${SCRAPER_CONTROL_PORT:-3001}
       BACKEND_INTERNAL_URL: ${BACKEND_INTERNAL_URL:-http://backend-api:3000/api/internal/scraper/config}
+      BACKEND_SOURCE_RUNS_URL: ${BACKEND_SOURCE_RUNS_URL:-http://backend-api:3000/api/internal/scraper/source-runs}
       API_INGEST_TOKEN: ${API_INGEST_TOKEN}
       RABBITMQ_URL: ${RABBITMQ_URL}
       QUEUE_RAW_EVENT: source.raw.v1
@@ -78,6 +88,14 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY}
       S3_BUCKET: ${S3_BUCKET}
       S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
+      REQUEST_TIMEOUT_MS: ${REQUEST_TIMEOUT_MS:-15000}
+      RETRY_ATTEMPTS: ${RETRY_ATTEMPTS:-3}
+      RETRY_BASE_DELAY_MS: ${RETRY_BASE_DELAY_MS:-1000}
+      CIRCUIT_BREAKER_FAILURE_THRESHOLD: ${CIRCUIT_BREAKER_FAILURE_THRESHOLD:-3}
+      CIRCUIT_BREAKER_OPEN_MS: ${CIRCUIT_BREAKER_OPEN_MS:-600000}
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,backend-api,postgres,redis,rabbitmq,minio}
       ENABLED_SOURCES: ${ENABLED_SOURCES}
       EASUZ_BASE_URL: ${EASUZ_BASE_URL:-https://easuz.mosreg.ru}
       EASUZ_SEARCH_URL: ${EASUZ_SEARCH_URL:-https://easuz.mosreg.ru/tenders}
@@ -109,6 +127,8 @@ services:
     depends_on:
       backend-api:
         condition: service_healthy
+      xray-proxy:
+        condition: service_started
       rabbitmq:
         condition: service_healthy
       minio:

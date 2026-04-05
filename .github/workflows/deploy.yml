@@ -18,7 +18,7 @@ on:
       deploy_path:
         description: "Remote path for compose files"
         required: true
-        default: /opt/aimsora
+        default: /opt/nppweb
       ssh_port:
         description: "SSH port"
         required: true
@@ -67,6 +67,11 @@ jobs:
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
           ADMIN_FULL_NAME: ${{ secrets.ADMIN_FULL_NAME }}
           ENABLED_SOURCES: ${{ vars.ENABLED_SOURCES }}
+          COMPOSE_PROFILES: ${{ vars.COMPOSE_PROFILES }}
+          REQUEST_TIMEOUT_MS: ${{ vars.REQUEST_TIMEOUT_MS }}
+          SCRAPER_HTTP_PROXY: ${{ vars.SCRAPER_HTTP_PROXY }}
+          SCRAPER_HTTPS_PROXY: ${{ vars.SCRAPER_HTTPS_PROXY }}
+          SCRAPER_NO_PROXY: ${{ vars.SCRAPER_NO_PROXY }}
           BACKEND_API_IMAGE: ${{ vars.BACKEND_API_IMAGE }}
           SCRAPER_SERVICE_IMAGE: ${{ vars.SCRAPER_SERVICE_IMAGE }}
           PROCESSING_WORKER_IMAGE: ${{ vars.PROCESSING_WORKER_IMAGE }}
@@ -97,17 +102,22 @@ jobs:
           S3_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minio123}
           S3_BUCKET=${MINIO_BUCKET:-scraper-artifacts}
           S3_FORCE_PATH_STYLE=true
-          ENABLED_SOURCES=${ENABLED_SOURCES:-demo-source}
+          COMPOSE_PROFILES=${COMPOSE_PROFILES:-}
+          ENABLED_SOURCES=${ENABLED_SOURCES:-easuz,eis,rnp,fedresurs,fns,gistorgi}
+          REQUEST_TIMEOUT_MS=${REQUEST_TIMEOUT_MS:-30000}
+          HTTP_PROXY=${SCRAPER_HTTP_PROXY:-}
+          HTTPS_PROXY=${SCRAPER_HTTPS_PROXY:-}
+          NO_PROXY=${SCRAPER_NO_PROXY:-localhost,127.0.0.1,backend-api,postgres,redis,rabbitmq,minio}
           API_GRAPHQL_URL=http://backend-api:3000/graphql
           FRONTEND_PORT=8080
 
-          BACKEND_API_IMAGE=${BACKEND_API_IMAGE:-ghcr.io/aimsora/backend-api}
+          BACKEND_API_IMAGE=${BACKEND_API_IMAGE:-ghcr.io/nppweb/backend-api}
           BACKEND_API_IMAGE_TAG=${IMAGE_TAG}
-          SCRAPER_SERVICE_IMAGE=${SCRAPER_SERVICE_IMAGE:-ghcr.io/aimsora/scraper-service}
+          SCRAPER_SERVICE_IMAGE=${SCRAPER_SERVICE_IMAGE:-ghcr.io/nppweb/scraper-service}
           SCRAPER_SERVICE_IMAGE_TAG=${IMAGE_TAG}
-          PROCESSING_WORKER_IMAGE=${PROCESSING_WORKER_IMAGE:-ghcr.io/aimsora/processing-worker}
+          PROCESSING_WORKER_IMAGE=${PROCESSING_WORKER_IMAGE:-ghcr.io/nppweb/processing-worker}
           PROCESSING_WORKER_IMAGE_TAG=${IMAGE_TAG}
-          FRONTEND_IMAGE=${FRONTEND_IMAGE:-ghcr.io/aimsora/aimsora}
+          FRONTEND_IMAGE=${FRONTEND_IMAGE:-ghcr.io/nppweb/npp-web}
           FRONTEND_IMAGE_TAG=${IMAGE_TAG}
           EOF
 
@@ -119,7 +129,7 @@ jobs:
           DEPLOY_PATH: ${{ inputs.deploy_path }}
         run: |
           set -euo pipefail
-          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEPLOY_PATH'"
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEPLOY_PATH' '$DEPLOY_PATH/xray-local'"
           rsync -az --delete -e "ssh -p $SSH_PORT" \
             docker-compose.yml \
             docker-compose.deploy.yml \

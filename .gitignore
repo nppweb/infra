@@ -1,2 +1,6 @@
 .env
 .DS_Store
+xray-local/*
+!xray-local/.gitkeep
+!xray-local/README.md
+!xray-local/config.example.json
