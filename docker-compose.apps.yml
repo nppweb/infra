@@ -103,7 +103,14 @@ services:
       EASUZ_USER_AGENT: ${EASUZ_USER_AGENT:-NPPWEB procurement monitor/1.0 (+https://example.local/nppweb)}
       EIS_BASE_URL: ${EIS_BASE_URL:-https://zakupki.gov.ru}
       EIS_SEARCH_URL: ${EIS_SEARCH_URL:-https://zakupki.gov.ru/epz/order/extendedsearch/results.html?searchString=&morphology=on&sortDirection=false&recordsPerPage=_10&showLotsInfoHidden=false}
-      EIS_MAX_ITEMS: ${EIS_MAX_ITEMS:-5}
+      EIS_MAX_ITEMS: ${EIS_MAX_ITEMS:-30}
+      EIS_MAX_PAGES: ${EIS_MAX_PAGES:-8}
+      EIS_RECORDS_PER_PAGE: ${EIS_RECORDS_PER_PAGE:-10}
+      EIS_PUBLISH_DATE_FROM: ${EIS_PUBLISH_DATE_FROM:-2025-01-01}
+      EIS_CONTRACTS_SEARCH_URL: ${EIS_CONTRACTS_SEARCH_URL:-https://zakupki.gov.ru/epz/contract/search/results.html?searchString=&recordsPerPage=_10}
+      EIS_CONTRACTS_MAX_ITEMS: ${EIS_CONTRACTS_MAX_ITEMS:-40}
+      EIS_CONTRACTS_223_SEARCH_URL: ${EIS_CONTRACTS_223_SEARCH_URL:-https://zakupki.gov.ru/epz/contractfz223/search/results.html?searchString=&recordsPerPage=_10}
+      EIS_CONTRACTS_223_MAX_ITEMS: ${EIS_CONTRACTS_223_MAX_ITEMS:-80}
       EIS_USER_AGENT: ${EIS_USER_AGENT:-NPPWEB procurement monitor/1.0 (+https://example.local/nppweb)}
       RNP_BASE_URL: ${RNP_BASE_URL:-https://zakupki.gov.ru}
       RNP_SEARCH_URL: ${RNP_SEARCH_URL:-https://zakupki.gov.ru/epz/dishonestsupplier/search/results.html?searchString=&recordsPerPage=_10}
