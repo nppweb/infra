@@ -117,6 +117,10 @@ services:
       RNP_MAX_ITEMS: ${RNP_MAX_ITEMS:-5}
       RNP_USER_AGENT: ${RNP_USER_AGENT:-NPPWEB procurement monitor/1.0 (+https://example.local/nppweb)}
       FEDRESURS_BASE_URL: ${FEDRESURS_BASE_URL:-https://bankrot.fedresurs.ru}
+      FEDRESURS_API_URL: ${FEDRESURS_API_URL:-https://bank-publications-prod.fedresurs.ru}
+      FEDRESURS_API_LOGIN: ${FEDRESURS_API_LOGIN:-}
+      FEDRESURS_API_PASSWORD: ${FEDRESURS_API_PASSWORD:-}
+      FEDRESURS_API_LOOKBACK_DAYS: ${FEDRESURS_API_LOOKBACK_DAYS:-31}
       FEDRESURS_SEARCH_URL: ${FEDRESURS_SEARCH_URL:-https://bankrot.fedresurs.ru/Messages.aspx}
       FEDRESURS_MAX_ITEMS: ${FEDRESURS_MAX_ITEMS:-5}
       FEDRESURS_USER_AGENT: ${FEDRESURS_USER_AGENT:-NPPWEB procurement monitor/1.0 (+https://example.local/nppweb)}
