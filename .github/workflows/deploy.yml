@@ -1,158 +1,191 @@
-name: Deploy Stand
+name: Production Deploy
 
 on:
+  push:
+    branches: ["main", "master"]
   workflow_dispatch:
     inputs:
-      environment:
-        description: "Target environment"
+      repo_name:
+        description: "Repository that triggered deploy"
         required: true
-        default: staging
+        default: infra
         type: choice
         options:
-          - staging
-          - production
-      image_tag:
-        description: "Docker tag for all apps"
+          - infra
+          - npp-web
+          - npp-backend
+          - processing-worker
+          - scrape-helper
+          - contracts
+      branch:
+        description: "Git branch to deploy on the server"
         required: true
-        default: edge
-      deploy_path:
-        description: "Remote path for compose files"
+        default: main
+      target_sha:
+        description: "Optional commit SHA from CI for traceability"
+        required: false
+        default: ""
+      services:
+        description: "Optional comma-separated docker compose services override"
+        required: false
+        default: ""
+      auto_rollback:
+        description: "Rollback automatically if deploy or health checks fail"
         required: true
-        default: /opt/nppweb
-      ssh_port:
-        description: "SSH port"
+        type: boolean
+        default: true
+  workflow_call:
+    inputs:
+      repo_name:
+        description: "Repository that triggered deploy"
         required: true
-        default: "22"
+        type: string
+      branch:
+        description: "Git branch to deploy on the server"
+        required: false
+        default: main
+        type: string
+      target_sha:
+        description: "Optional commit SHA from CI for traceability"
+        required: false
+        default: ""
+        type: string
+      services:
+        description: "Optional comma-separated docker compose services override"
+        required: false
+        default: ""
+        type: string
+      auto_rollback:
+        description: "Rollback automatically if deploy or health checks fail"
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: read
 
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
+    timeout-minutes: 45
+    environment: production
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Resolve deploy parameters
+        id: params
+        env:
+          INPUT_REPO_NAME: ${{ inputs.repo_name }}
+          INPUT_BRANCH: ${{ inputs.branch }}
+          INPUT_TARGET_SHA: ${{ inputs.target_sha }}
+          INPUT_SERVICES: ${{ inputs.services }}
+          INPUT_AUTO_ROLLBACK: ${{ inputs.auto_rollback }}
+        run: |
+          set -Eeuo pipefail
+
+          if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            repo_name="infra"
+            branch="${GITHUB_REF_NAME}"
+            target_sha="${GITHUB_SHA}"
+            services=""
+            auto_rollback="true"
+          else
+            repo_name="${INPUT_REPO_NAME:-infra}"
+            branch="${INPUT_BRANCH:-main}"
+            target_sha="${INPUT_TARGET_SHA:-}"
+            services="${INPUT_SERVICES:-}"
+            auto_rollback="${INPUT_AUTO_ROLLBACK:-true}"
+          fi
+
+          {
+            echo "repo_name=${repo_name}"
+            echo "branch=${branch}"
+            echo "target_sha=${target_sha}"
+            echo "services=${services}"
+            echo "auto_rollback=${auto_rollback}"
+          } >>"$GITHUB_OUTPUT"
+
+          echo "Resolved deploy target: repo=${repo_name}, branch=${branch}, sha=${target_sha:-n/a}, services=${services:-default}"
 
       - name: Configure SSH
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_PORT: ${{ inputs.ssh_port }}
+          SSH_PORT_INPUT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
         run: |
-          set -euo pipefail
+          set -Eeuo pipefail
+
+          [[ -n "${SSH_HOST}" ]] || { echo "SSH_HOST secret is required"; exit 1; }
+          [[ -n "${SSH_USER}" ]] || { echo "SSH_USER secret is required"; exit 1; }
+          [[ -n "${SSH_PRIVATE_KEY}" ]] || { echo "SSH_PRIVATE_KEY secret is required"; exit 1; }
+
+          ssh_port="${SSH_PORT_INPUT:-22}"
+
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          printf "%s\n" "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "${SSH_PRIVATE_KEY}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts
+
+          if [[ -n "${SSH_KNOWN_HOSTS}" ]]; then
+            printf '%s\n' "${SSH_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -p "${ssh_port}" -H "${SSH_HOST}" >> ~/.ssh/known_hosts
+          fi
+
           chmod 644 ~/.ssh/known_hosts
 
-      - name: Build deploy env file
+      - name: Run deploy on server
         env:
-          IMAGE_TAG: ${{ inputs.image_tag }}
-          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
-          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          JWT_ACCESS_SECRET: ${{ secrets.JWT_ACCESS_SECRET }}
-          RABBITMQ_DEFAULT_USER: ${{ secrets.RABBITMQ_DEFAULT_USER }}
-          RABBITMQ_DEFAULT_PASS: ${{ secrets.RABBITMQ_DEFAULT_PASS }}
-          MINIO_ROOT_USER: ${{ secrets.MINIO_ROOT_USER }}
-          MINIO_ROOT_PASSWORD: ${{ secrets.MINIO_ROOT_PASSWORD }}
-          MINIO_BUCKET: ${{ secrets.MINIO_BUCKET }}
-          INGEST_API_TOKEN: ${{ secrets.INGEST_API_TOKEN }}
-          API_INGEST_TOKEN: ${{ secrets.API_INGEST_TOKEN }}
-          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
-          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
-          ADMIN_FULL_NAME: ${{ secrets.ADMIN_FULL_NAME }}
-          ENABLED_SOURCES: ${{ vars.ENABLED_SOURCES }}
-          COMPOSE_PROFILES: ${{ vars.COMPOSE_PROFILES }}
-          REQUEST_TIMEOUT_MS: ${{ vars.REQUEST_TIMEOUT_MS }}
-          SCRAPER_HTTP_PROXY: ${{ vars.SCRAPER_HTTP_PROXY }}
-          SCRAPER_HTTPS_PROXY: ${{ vars.SCRAPER_HTTPS_PROXY }}
-          SCRAPER_NO_PROXY: ${{ vars.SCRAPER_NO_PROXY }}
-          BACKEND_API_IMAGE: ${{ vars.BACKEND_API_IMAGE }}
-          SCRAPER_SERVICE_IMAGE: ${{ vars.SCRAPER_SERVICE_IMAGE }}
-          PROCESSING_WORKER_IMAGE: ${{ vars.PROCESSING_WORKER_IMAGE }}
-          FRONTEND_IMAGE: ${{ vars.FRONTEND_IMAGE }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT_INPUT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          DEPLOY_PATH_INPUT: ${{ secrets.DEPLOY_PATH }}
+          REPO_NAME: ${{ steps.params.outputs.repo_name }}
+          BRANCH: ${{ steps.params.outputs.branch }}
+          TARGET_SHA: ${{ steps.params.outputs.target_sha }}
+          SERVICES: ${{ steps.params.outputs.services }}
+          AUTO_ROLLBACK: ${{ steps.params.outputs.auto_rollback }}
         run: |
-          set -euo pipefail
-          cat > .env.deploy <<EOF
-          POSTGRES_DB=${POSTGRES_DB:-procurement}
-          POSTGRES_USER=${POSTGRES_USER:-app}
-          POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-app}
-          DATABASE_URL=postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app}@postgres:5432/${POSTGRES_DB:-procurement}?schema=public
-          REDIS_URL=redis://redis:6379
-          JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET:-replace_me}
-          INGEST_API_TOKEN=${INGEST_API_TOKEN:-replace_me_with_shared_ingest_token}
-          API_INGEST_TOKEN=${API_INGEST_TOKEN:-${INGEST_API_TOKEN:-replace_me_with_shared_ingest_token}}
-          ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
-          ADMIN_PASSWORD=${ADMIN_PASSWORD:-ChangeMe123456}
-          ADMIN_FULL_NAME=${ADMIN_FULL_NAME:-Deploy Administrator}
-          RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER:-app}
-          RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS:-app}
-          RABBITMQ_URL=amqp://${RABBITMQ_DEFAULT_USER:-app}:${RABBITMQ_DEFAULT_PASS:-app}@rabbitmq:5672
-          MINIO_ROOT_USER=${MINIO_ROOT_USER:-minio}
-          MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minio123}
-          MINIO_BUCKET=${MINIO_BUCKET:-scraper-artifacts}
-          S3_ENDPOINT=http://minio:9000
-          S3_REGION=ru-central-1
-          S3_ACCESS_KEY=${MINIO_ROOT_USER:-minio}
-          S3_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minio123}
-          S3_BUCKET=${MINIO_BUCKET:-scraper-artifacts}
-          S3_FORCE_PATH_STYLE=true
-          COMPOSE_PROFILES=${COMPOSE_PROFILES:-}
-          ENABLED_SOURCES=${ENABLED_SOURCES:-easuz,eis,rnp,fedresurs,fns,gistorgi}
-          REQUEST_TIMEOUT_MS=${REQUEST_TIMEOUT_MS:-30000}
-          HTTP_PROXY=${SCRAPER_HTTP_PROXY:-}
-          HTTPS_PROXY=${SCRAPER_HTTPS_PROXY:-}
-          NO_PROXY=${SCRAPER_NO_PROXY:-localhost,127.0.0.1,backend-api,postgres,redis,rabbitmq,minio}
-          API_GRAPHQL_URL=http://backend-api:3000/graphql
-          FRONTEND_PORT=8080
+          set -Eeuo pipefail
 
-          BACKEND_API_IMAGE=${BACKEND_API_IMAGE:-ghcr.io/nppweb/backend-api}
-          BACKEND_API_IMAGE_TAG=${IMAGE_TAG}
-          SCRAPER_SERVICE_IMAGE=${SCRAPER_SERVICE_IMAGE:-ghcr.io/nppweb/scraper-service}
-          SCRAPER_SERVICE_IMAGE_TAG=${IMAGE_TAG}
-          PROCESSING_WORKER_IMAGE=${PROCESSING_WORKER_IMAGE:-ghcr.io/nppweb/processing-worker}
-          PROCESSING_WORKER_IMAGE_TAG=${IMAGE_TAG}
-          FRONTEND_IMAGE=${FRONTEND_IMAGE:-ghcr.io/nppweb/npp-web}
-          FRONTEND_IMAGE_TAG=${IMAGE_TAG}
+          ssh_port="${SSH_PORT_INPUT:-22}"
+          deploy_path="${DEPLOY_PATH_INPUT:-/home/deploy}"
+
+          ssh -p "${ssh_port}" "${SSH_USER}@${SSH_HOST}" bash -s -- \
+            "${REPO_NAME}" \
+            "${BRANCH}" \
+            "${TARGET_SHA}" \
+            "${SERVICES}" \
+            "${AUTO_ROLLBACK}" \
+            "${deploy_path}" <<'EOF'
+          set -Eeuo pipefail
+
+          repo_name="$1"
+          branch="$2"
+          target_sha="$3"
+          services="$4"
+          auto_rollback="$5"
+          deploy_path="$6"
+
+          args=(--repo "$repo_name" --branch "$branch")
+
+          if [[ -n "$target_sha" ]]; then
+            args+=(--sha "$target_sha")
+          fi
+
+          if [[ -n "$services" ]]; then
+            args+=(--services "$services")
+          fi
+
+          if [[ "$auto_rollback" != "true" ]]; then
+            args+=(--no-auto-rollback)
+          fi
+
+          export DEPLOY_PATH="$deploy_path"
+          cd "$deploy_path/infra"
+          ./scripts/deploy.sh "${args[@]}"
           EOF
-
-      - name: Sync compose files to server
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_PORT: ${{ inputs.ssh_port }}
-          DEPLOY_PATH: ${{ inputs.deploy_path }}
-        run: |
-          set -euo pipefail
-          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEPLOY_PATH' '$DEPLOY_PATH/xray-local'"
-          rsync -az --delete -e "ssh -p $SSH_PORT" \
-            docker-compose.yml \
-            docker-compose.deploy.yml \
-            contracts \
-            "$SSH_USER@$SSH_HOST:$DEPLOY_PATH/"
-          scp -P "$SSH_PORT" .env.deploy "$SSH_USER@$SSH_HOST:$DEPLOY_PATH/.env"
-
-      - name: Deploy stack on server
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_PORT: ${{ inputs.ssh_port }}
-          DEPLOY_PATH: ${{ inputs.deploy_path }}
-          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
-        run: |
-          set -euo pipefail
-          echo "$GHCR_TOKEN" | ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
-            "docker login ghcr.io -u '$GHCR_USERNAME' --password-stdin"
-          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "
-            set -euo pipefail
-            cd '$DEPLOY_PATH'
-            docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml pull
-            docker compose --env-file .env -f docker-compose.yml -f docker-compose.deploy.yml up -d
-            docker image prune -f
-          "
