@@ -19,8 +19,8 @@ on:
           - contracts
       branch:
         description: "Git branch to deploy on the server"
-        required: true
-        default: main
+        required: false
+        default: auto
       target_sha:
         description: "Optional commit SHA from CI for traceability"
         required: false
@@ -43,7 +43,7 @@ on:
       branch:
         description: "Git branch to deploy on the server"
         required: false
-        default: main
+        default: auto
         type: string
       target_sha:
         description: "Optional commit SHA from CI for traceability"
@@ -85,6 +85,17 @@ jobs:
         run: |
           set -Eeuo pipefail
 
+          default_branch_for_repo() {
+            case "$1" in
+              npp-web|npp-backend)
+                printf 'main\n'
+                ;;
+              *)
+                printf 'master\n'
+                ;;
+            esac
+          }
+
           if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
             repo_name="infra"
             branch="${GITHUB_REF_NAME}"
@@ -93,7 +104,12 @@ jobs:
             auto_rollback="true"
           else
             repo_name="${INPUT_REPO_NAME:-infra}"
-            branch="${INPUT_BRANCH:-main}"
+            branch_input="${INPUT_BRANCH:-auto}"
+            if [[ -z "${branch_input}" || "${branch_input}" == "auto" ]]; then
+              branch="$(default_branch_for_repo "${repo_name}")"
+            else
+              branch="${branch_input}"
+            fi
             target_sha="${INPUT_TARGET_SHA:-}"
             services="${INPUT_SERVICES:-}"
             auto_rollback="${INPUT_AUTO_ROLLBACK:-true}"

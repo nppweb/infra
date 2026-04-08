@@ -122,7 +122,7 @@ docker compose --env-file .env -f docker-compose.yml -f docker-compose.apps.yml 
 
 - единый reusable workflow живёт в `infra`
 - `npp-web`, `npp-backend`, `processing-worker`, `scrape-helper` и `contracts` имеют тонкие workflows-обёртки
-- каждый такой workflow при `push` в `main` вызывает reusable workflow из `infra`
+- каждый такой workflow при `push` в `main` или `master` вызывает reusable workflow из `infra`
 - reusable workflow по SSH заходит на production VPS под пользователем `deploy`
 - на сервере запускается [`scripts/deploy.sh`](/home/minkin/vkrdiff/infra/scripts/deploy.sh), который:
   - берёт глобальный lock через `flock`
@@ -144,18 +144,18 @@ docker compose --env-file .env -f docker-compose.yml -f docker-compose.apps.yml 
 
 ### Как триггерится деплой из нескольких репозиториев
 
-- push в `infra/main` запускает [`infra/.github/workflows/deploy.yml`](/home/minkin/vkrdiff/infra/.github/workflows/deploy.yml) напрямую и делает full-stack deploy
+- push в `infra/master` запускает [`infra/.github/workflows/deploy.yml`](/home/minkin/vkrdiff/infra/.github/workflows/deploy.yml) напрямую и делает full-stack deploy
 - push в `npp-web/main` запускает [`npp-web/.github/workflows/production-deploy.yml`](/home/minkin/vkrdiff/npp-web/.github/workflows/production-deploy.yml), который вызывает reusable workflow из `infra` и пересобирает только `frontend`
 - push в `npp-backend/main` запускает [`npp-backend/.github/workflows/production-deploy.yml`](/home/minkin/vkrdiff/npp-backend/.github/workflows/production-deploy.yml), который пересобирает `backend-api`
-- push в `processing-worker/main` пересобирает только `processing-worker`
-- push в `scrape-helper/main` пересобирает только `scraper-service`
-- push в `contracts/main` обновляет `contracts` и пересобирает `processing-worker` и `scraper-service`
+- push в `processing-worker/master` пересобирает только `processing-worker`
+- push в `scrape-helper/master` пересобирает только `scraper-service`
+- push в `contracts/master` обновляет `contracts` и пересобирает `processing-worker` и `scraper-service`
 
 Таким образом:
 
 - приложение деплоится из нескольких отдельных репозиториев
 - compose всё равно исполняется только на сервере из `infra`
-- `infra` repo на сервере тоже обновляется перед deploy, чтобы compose и скрипты не расходились с текущим `main`
+- `infra` repo на сервере тоже обновляется перед deploy по своей основной ветке `master`, чтобы compose и скрипты не расходились с production checkout
 
 ### Minimal Downtime
 

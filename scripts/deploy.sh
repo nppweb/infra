@@ -11,14 +11,13 @@ DEPLOY_ROOT="${DEPLOY_PATH:-$DEPLOY_ROOT_DEFAULT}"
 STATE_DIR="${DEPLOY_STATE_DIR:-$DEPLOY_ROOT/.deploy-state}"
 LOCK_FILE="${DEPLOY_LOCK_FILE:-$STATE_DIR/deploy.lock}"
 COMPOSE_ENV_FILE="${DEPLOY_ENV_FILE:-$INFRA_DIR/.env}"
-DEFAULT_BRANCH="${DEPLOY_BRANCH:-main}"
 WAIT_TIMEOUT="${DEPLOY_WAIT_TIMEOUT:-300}"
 POLL_INTERVAL="${DEPLOY_POLL_INTERVAL:-5}"
 
 MANAGED_REPOS=(infra npp-web npp-backend processing-worker scrape-helper contracts)
 
 TARGET_REPO=""
-TARGET_BRANCH="$DEFAULT_BRANCH"
+TARGET_BRANCH=""
 TARGET_SHA=""
 SERVICES_OVERRIDE=""
 AUTO_ROLLBACK=1
@@ -53,7 +52,8 @@ Options:
   --repo <name>           Repository to update. One of:
                           infra, npp-web, npp-backend, processing-worker,
                           scrape-helper, contracts.
-  --branch <name>         Git branch to deploy. Default: main.
+  --branch <name>         Git branch to deploy. Default depends on repo:
+                          main for npp-web/npp-backend, master otherwise.
   --sha <commit>          Commit SHA from CI for logging/verification.
   --services <list>       Comma-separated docker compose services override.
   --no-auto-rollback      Disable automatic rollback on failure.
@@ -65,6 +65,22 @@ Examples:
   ./scripts/deploy.sh --repo npp-web --sha 0123abcd
   ./scripts/deploy.sh --repo contracts --services processing-worker,scraper-service
 EOF
+}
+
+default_branch_for_repo() {
+  local repo_name="$1"
+
+  case "$repo_name" in
+    npp-web | npp-backend)
+      printf 'main\n'
+      ;;
+    infra | processing-worker | scrape-helper | contracts)
+      printf 'master\n'
+      ;;
+    *)
+      fail "Unknown repo for default branch: $repo_name"
+      ;;
+  esac
 }
 
 require_command() {
@@ -171,7 +187,9 @@ parse_args() {
   done
 
   [[ -n "$TARGET_REPO" ]] || fail "--repo is required"
-  [[ -n "$TARGET_BRANCH" ]] || fail "--branch cannot be empty"
+  if [[ -z "$TARGET_BRANCH" ]]; then
+    TARGET_BRANCH=$(default_branch_for_repo "$TARGET_REPO")
+  fi
 }
 
 ensure_repo_ready() {
@@ -505,9 +523,12 @@ handle_error() {
 }
 
 perform_deploy() {
+  local infra_branch
+
   if ((UPDATE_INFRA == 1)) && [[ "$TARGET_REPO" != "infra" ]]; then
+    infra_branch=$(default_branch_for_repo infra)
     ensure_repo_ready infra
-    update_repo infra "$TARGET_BRANCH"
+    update_repo infra "$infra_branch"
   fi
 
   ensure_repo_ready "$TARGET_REPO"
