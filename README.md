@@ -42,6 +42,8 @@ cp xray-local/config.example.json xray-local/config.json
 
 Для deploy-контура логика такая же: на сервере должен существовать файл `xray-local/config.json`. Чтобы compose поднял `xray-proxy` автоматически, добавьте в deploy `.env` значение `COMPOSE_PROFILES=proxy` и задайте `HTTP_PROXY/HTTPS_PROXY=http://xray-proxy:8080`.
 
+Если в deploy `.env` указаны `HTTP_PROXY`/`HTTPS_PROXY`, но не задан `COMPOSE_PROFILES=proxy`, сервис `xray-proxy` не будет создан, и `scraper-service` начнёт массово получать `fetch failed`/connect timeout на внешних государственных площадках.
+
 ## Куда открыть браузер
 
 - frontend: `http://localhost:8080`
